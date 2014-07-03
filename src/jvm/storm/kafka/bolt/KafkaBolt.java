@@ -28,7 +28,7 @@ public class KafkaBolt<K, V> extends BaseRichBolt {
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaBolt.class);
 
-    public static final String TOPIC = "topic";
+    public static final String DEFAULT_TOPIC_KEY = "topic";
     public static final String KAFKA_BROKER_PROPERTIES = "kafka.broker.properties";
 
     public static final String BOLT_KEY = "key";
@@ -36,8 +36,17 @@ public class KafkaBolt<K, V> extends BaseRichBolt {
 
     private Producer<K, V> producer;
     private OutputCollector collector;
+    private String topicKey;
     private String topic;
 
+    public KafkaBolt() {
+		this(DEFAULT_TOPIC_KEY);
+	}
+    
+    public KafkaBolt(String topicKey) {
+    	this.topicKey = topicKey;
+    }
+    
     @Override
     public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
         Map configMap = (Map) stormConf.get(KAFKA_BROKER_PROPERTIES);
@@ -45,7 +54,7 @@ public class KafkaBolt<K, V> extends BaseRichBolt {
         properties.putAll(configMap);
         ProducerConfig config = new ProducerConfig(properties);
         producer = new Producer<K, V>(config);
-        this.topic = (String) stormConf.get(TOPIC);
+        this.topic = (String) stormConf.get(topicKey);
         this.collector = collector;
     }
 

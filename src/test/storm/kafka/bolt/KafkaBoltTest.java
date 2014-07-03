@@ -1,5 +1,32 @@
 package storm.kafka.bolt;
 
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.verify;
+
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Properties;
+
+import kafka.api.OffsetRequest;
+import kafka.javaapi.consumer.SimpleConsumer;
+import kafka.javaapi.message.ByteBufferMessageSet;
+import kafka.message.Message;
+import kafka.message.MessageAndOffset;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import storm.kafka.Broker;
+import storm.kafka.BrokerHosts;
+import storm.kafka.KafkaConfig;
+import storm.kafka.KafkaTestBroker;
+import storm.kafka.KafkaUtils;
+import storm.kafka.Partition;
+import storm.kafka.StaticHosts;
+import storm.kafka.trident.GlobalPartitionInformation;
 import backtype.storm.Config;
 import backtype.storm.task.GeneralTopologyContext;
 import backtype.storm.task.IOutputCollector;
@@ -10,25 +37,6 @@ import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.TupleImpl;
 import backtype.storm.tuple.Values;
 import backtype.storm.utils.Utils;
-import kafka.api.OffsetRequest;
-import kafka.javaapi.consumer.SimpleConsumer;
-import kafka.javaapi.message.ByteBufferMessageSet;
-import kafka.message.Message;
-import kafka.message.MessageAndOffset;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import storm.kafka.*;
-import storm.kafka.trident.GlobalPartitionInformation;
-
-import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Properties;
-
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.verify;
 
 public class KafkaBoltTest {
 
@@ -47,7 +55,7 @@ public class KafkaBoltTest {
         MockitoAnnotations.initMocks(this);
         broker = new KafkaTestBroker();
         setupKafkaConsumer();
-        config.put(KafkaBolt.TOPIC, TEST_TOPIC);
+        config.put(KafkaBolt.DEFAULT_TOPIC_KEY, TEST_TOPIC);
         bolt = generateStringSerializerBolt();
     }
 
@@ -63,6 +71,14 @@ public class KafkaBoltTest {
         globalPartitionInformation.addPartition(0, Broker.fromString(broker.getBrokerConnectionString()));
         BrokerHosts brokerHosts = new StaticHosts(globalPartitionInformation);
         kafkaConfig = new KafkaConfig(brokerHosts, TEST_TOPIC);
+        simpleConsumer = new SimpleConsumer("localhost", broker.getPort(), 60000, 1024, "testClient");
+    }
+    
+    private void setupKafkaConsumer(String topic) {
+        GlobalPartitionInformation globalPartitionInformation = new GlobalPartitionInformation();
+        globalPartitionInformation.addPartition(0, Broker.fromString(broker.getBrokerConnectionString()));
+        BrokerHosts brokerHosts = new StaticHosts(globalPartitionInformation);
+        kafkaConfig = new KafkaConfig(brokerHosts, topic);
         simpleConsumer = new SimpleConsumer("localhost", broker.getPort(), 60000, 1024, "testClient");
     }
 
@@ -89,7 +105,31 @@ public class KafkaBoltTest {
         verifyMessage(keyString, messageString);
     }
 
-    private KafkaBolt generateStringSerializerBolt() {
+    @Test
+    public void executeWithCustomTopic(){
+    	setupKafkaConsumer("test-custom-topic");
+    	bolt = generateStringSerializerBoltWithCustomTopic();
+        String message = "value-123";
+        String key = "key-123";
+        Tuple tuple = generateTestTuple(key, message);
+        bolt.execute(tuple);
+        verify(collector).ack(tuple);
+        verifyMessage(key, message);
+    }
+    
+    private KafkaBolt generateStringSerializerBoltWithCustomTopic() {
+        KafkaBolt bolt = new KafkaBolt("custom-topic");
+        Properties props = new Properties();
+        props.put("metadata.broker.list", broker.getBrokerConnectionString());
+        props.put("request.required.acks", "1");
+        props.put("serializer.class", "kafka.serializer.StringEncoder");
+        config.put(KafkaBolt.KAFKA_BROKER_PROPERTIES, props);
+        config.put("custom-topic", "test-custom-topic");
+        bolt.prepare(config, null, new OutputCollector(collector));
+        return bolt;
+	}
+
+	private KafkaBolt generateStringSerializerBolt() {
         KafkaBolt bolt = new KafkaBolt();
         Properties props = new Properties();
         props.put("metadata.broker.list", broker.getBrokerConnectionString());
