@@ -8,6 +8,7 @@ import backtype.storm.tuple.Tuple;
 import kafka.javaapi.producer.Producer;
 import kafka.producer.KeyedMessage;
 import kafka.producer.ProducerConfig;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +67,7 @@ public class KafkaBolt<K, V> extends BaseRichBolt {
         }
         V message = (V) input.getValueByField(BOLT_MESSAGE);
         try {
+        	LOG.debug(String.format("Sending message to topic %s with key %s", topic, key));
             producer.send(new KeyedMessage<K, V>(topic, key, message));
         } catch (Exception ex) {
             LOG.error("Could not send message with key '" + key + "' and value '" + message + "'", ex);
